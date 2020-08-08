@@ -1,0 +1,12 @@
+var mysql = require('mysql');
+
+var con = new mysql.createConnection({
+    host: 'localhost',
+    user: 'root',
+    password: 'password',
+    database: 'uniswap'
+});
+
+con.connect();
+
+module.exports = con;
