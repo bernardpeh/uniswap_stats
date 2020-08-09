@@ -13,10 +13,8 @@ function sleep(ms){
     })
 }
 
-async function insert_token(address, hash, block_number, input_method, from, amt_out) {
-    // check if token is in db, if not insert
+async function insert_coin(address) {
     let sql = "SELECT * from uniswap_coin WHERE contract_address='"+address+"'";
-    let token_id = '';
     con.query(sql, async function (error, res, fields) {
         // if coin not found, insert
         if (!res.length) {
@@ -28,26 +26,52 @@ async function insert_token(address, hash, block_number, input_method, from, amt
             let total_supply = await contract.methods.totalSupply().call().then((res) => { return res })
             // insert coin
             let sql1 = "INSERT INTO uniswap_coin (contract_address, name, symbol, decimals, total_supply) VALUES ('" + address + "','" + name + "','" + symbol + "','" + decimals + "','" + total_supply + "')";
-            con.query(sql1);
-            let sql2 = "select last_insert_id() as inserted_id";
-            con.query(sql2, function (error, res, fields) {
-                console.log('new token id found:' +res[0].inserted_id)
-                token_id = res[0].inserted_id
+            con.query(sql1, async function (error, rows, fields) {
+                // ignore error for now
+                if (error) {}
             });
-
         }
-        // coin found, just return id
-        else {
-            token_id = res[0].id
-            console.log('Existing token found: '+token_id)
-        }
-        // wait for 1 sec
-        await sleep(1000)
-        console.log('block '+block_number+': token id to be inserted: '+token_id)
-        let sql2 = "INSERT INTO uniswap_tx (txhash, blocknumber, uniswap_coin_in_id, uniswap_coin_out_id, method, address_from, amount_out) " +
-            "VALUES ('" + hash + "','" + block_number + "','" + '1' + "','" + token_id + "','" + input_method + "','" + from + "','" + amt_out + "')";
-        con.query(sql2)
     });
+}
+
+async function get_coin_id(address) {
+    let token_id = 1
+    if (address) {
+        let sql = "SELECT * from uniswap_coin WHERE contract_address='"+address+"'";
+        console.log(sql)
+        con.query(sql, async function (error, res, fields) {
+            // if coin found, assign id
+            if (res.length) {
+                token_id = res[0].id
+            }
+        })
+    }
+    await sleep(3000)
+    return token_id
+}
+
+async function insert_tx(token_contracts, hash, block_number, input_method, from, amt_out, amt_in) {
+    for (let address of token_contracts) {
+        // check contract in is null, it is ethereum
+        if (address) {
+            await insert_coin(address)
+        }
+    }
+    // wait for 2 sec
+    await sleep(2000)
+    // get token in and token out
+    let token_in_id = await get_coin_id(token_contracts[0])
+    let token_out_id = await get_coin_id(token_contracts[1])
+
+    // wait for 1 sec
+    // await sleep(1000)
+    console.log('block '+block_number+': token in, token out: '+token_in_id+','+token_out_id)
+    let sql2 = "INSERT INTO uniswap_tx (txhash, blocknumber, uniswap_coin_in_id, uniswap_coin_out_id, method, address_from, amount_out, amount_in) " +
+        "VALUES ('" + hash + "','" + block_number + "','" + token_in_id + "','" + token_out_id + "','" + input_method + "','" + from + "','" + amt_out + "','" + amt_in + "')";
+    con.query(sql2, async function (error, rows, fields) {
+        // ignore error for now
+        if (error) {}
+    })
 }
 
 async function check_current_block(block_number) {
@@ -58,26 +82,89 @@ async function check_current_block(block_number) {
             start_process(block_number)
         }
         else {
-            console.log('waiting for 12 more secs. too fast..')
-            await sleep(12000)
+            console.log('waiting for 6 more secs. too fast..')
+            await sleep(6000)
             check_current_block(block_number)
         }
     })
 }
 
-function start_process(block_number) {
+async function start_process(block_number) {
+
+//     insert_tx(['', 'dac17f958d2ee523a2206206994597c13d831ec7'], '123', '123', 'adas', 'cwds', '13', '1224');
+//     await sleep(10000)
+// process.exit()
+
     web3.eth.getBlock(block_number).then( async function (current_block) {
         console.log('Processing Block Number: '+current_block.number)
         for (let tx of current_block.transactions) {
-            web3.eth.getTransaction(tx).then( (val) => {
+            web3.eth.getTransaction(tx).then( async function (val) {
                 if (uniswap_contract == val.to) {
-                    input = uniswap.decodeData(val.input)
+                    let input = uniswap.decodeData(val.input)
+                    let amt_in = ''
+                    let amt_out = ''
+                    let token_contracts = []
+                    await sleep(500)
                     switch(input.method) {
+                        case "swapETHForExactTokens":
+                            amt_out = input.inputs[0].toNumber()
+                            token_contracts = ['', input.inputs[1][1]]
+                            console.log('swapETHForExactTokens activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, val.value);
+                            break;
                         case "swapExactETHForTokens":
-                            let amt_out = input.inputs[0].toNumber()
-                            token_contract = input.inputs[1][1]
-                            console.log('swapExactETHForTokens found - token contract: '+token_contract)
-                            insert_token(token_contract, val.hash, val.blockNumber, input.method, val.from, amt_out);
+                            amt_out = input.inputs[0].toNumber()
+                            token_contracts = ['', input.inputs[1][1]]
+                            console.log('swapExactETHForTokens activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, val.value);
+                            break;
+                        case "swapExactETHForTokensSupportingFeeOnTransferTokens":
+                            amt_out = input.inputs[0].toNumber()
+                            token_contracts = ['', input.inputs[1][1]]
+                            console.log('swapExactETHForTokensSupportingFeeOnTransferTokens activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, val.value);
+                            break;
+                        case "swapExactTokensForETH":
+                            amt_in = input.inputs[0].toNumber()
+                            amt_out = input.inputs[1].toNumber()
+                            token_contracts = [input.inputs[2][0],'']
+                            console.log('swapExactTokensForETH activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, amt_in);
+                            break;
+                        case "swapTokensForExactETH":
+                            amt_in = input.inputs[0].toNumber()
+                            amt_out = input.inputs[1].toNumber()
+                            token_contracts = [input.inputs[2][0],'']
+                            console.log('swapTokensForExactETH activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, amt_in);
+                            break;
+                        case "swapExactTokensForETHSupportingFeeOnTransferTokens":
+                            amt_in = input.inputs[0].toNumber()
+                            amt_out = input.inputs[1].toNumber()
+                            token_contracts = [input.inputs[2][0],'']
+                            console.log('swapExactTokensForETHSupportingFeeOnTransferTokens activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, amt_in);
+                            break;
+                        case "swapExactTokensForTokens":
+                            amt_in = input.inputs[0].toNumber()
+                            amt_out = input.inputs[1].toNumber()
+                            token_contracts = [input.inputs[2][0], input.inputs[2][2]]
+                            console.log('swapExactTokensForTokens activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, amt_in);
+                            break;
+                        case "swapExactTokensForTokensSupportingFeeOnTransferTokens":
+                            amt_in = input.inputs[0].toNumber()
+                            amt_out = input.inputs[1].toNumber()
+                            token_contracts = [input.inputs[2][0], input.inputs[2][2]]
+                            console.log('swapExactTokensForTokensSupportingFeeOnTransferTokens activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, amt_in);
+                            break;
+                        case "swapTokensForExactTokens":
+                            amt_in = input.inputs[0].toNumber()
+                            amt_out = input.inputs[1].toNumber()
+                            token_contracts = [input.inputs[2][0], input.inputs[2][2]]
+                            console.log('swapTokensForExactTokens activated')
+                            await insert_tx(token_contracts, val.hash, val.blockNumber, input.method, val.from, amt_out, amt_in);
                             break;
                         default:
                             // default method
@@ -85,7 +172,8 @@ function start_process(block_number) {
                 }
             })
         }
-        await sleep(12000)
+        // wait 6 secs
+        await sleep(6000)
         // now loop start_process and increase counter by 1
         let next_block = current_block.number + 1
         check_current_block(next_block)
