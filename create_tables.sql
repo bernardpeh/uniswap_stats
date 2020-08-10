@@ -39,6 +39,7 @@ CREATE TABLE `my_portfolio` (
   `amount_in` varchar(30) NULL,
   `amount_out` varchar(30) NULL,
   `is_active`  TINYINT(1) NOT NULL DEFAULT '1',
+  `comments` TEXT NULL,
   `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
    PRIMARY KEY  (`id`),
    FOREIGN KEY (uniswap_coin_in_id) REFERENCES uniswap_coin(id),
