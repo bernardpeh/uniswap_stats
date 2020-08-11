@@ -9,7 +9,8 @@
   "dependencies": {
     "@truffle/hdwallet-provider": "^1.0.40",
     "ethereum-input-data-decoder": "^0.3.1",
-    "mysql": "^2.16.0"
+    "mysql": "^2.16.0",
+    "util": "^0.12.3"
   },
   "devDependencies": {},
   "scripts": {

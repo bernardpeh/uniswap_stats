@@ -28,4 +28,8 @@ truffle exec index.js --network=main
 php -S localhost:8080
 ```
 
+## TODO
+
+* do not insert failed tx based on getTransactionReceipt
+
 

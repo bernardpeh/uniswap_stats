@@ -28,6 +28,7 @@ CREATE TABLE `uniswap_coin` (
   `decimals` varchar(2) NULL,
   `total_supply` varchar(40) NULL,
   `is_active`  TINYINT(1) NOT NULL DEFAULT '1',
+  `is_fav`  TINYINT(1) NOT NULL DEFAULT '1',
   `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
    PRIMARY KEY  (`id`)
 );
